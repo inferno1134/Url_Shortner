@@ -1,3 +1,3 @@
-module app
+module url-shortner
 
 go 1.26.3
