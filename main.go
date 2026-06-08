@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"os"
 
 	"url-shortner/handlers"
 	"url-shortner/service"
@@ -11,38 +12,85 @@ import (
 
 func main (){
 
-	memoryStore:= store.NewMemoryStore()
-
-	shortnerService := service.NewShortnerService(
-		memoryStore,
-	)
-
-	urlHandler := handlers.NewUrlHandler(
-		shortnerService,
-	)
-
-	http.HandleFunc(
-	"/shorten",
-	urlHandler.ShortenUrl,
-	)
+	//this is default code 
 
 
-	http.HandleFunc(
-		"/",
-		urlHandler.RedirectURL,
-	)
+	// memoryStore:= store.NewMemoryStore()
+
+	// shortnerService := service.NewShortnerService(
+	// 	memoryStore,
+	// )
+
+	// urlHandler := handlers.NewUrlHandler(
+	// 	shortnerService,
+	// )
+
+	// http.HandleFunc(
+	// "/shorten",
+	// urlHandler.ShortenUrl,
+	// )
 
 
-	fmt.Println("Server Started on:8080")
+	// http.HandleFunc(
+	// 	"/",
+	// 	urlHandler.RedirectURL,
+	// )
 
-	err:= http.ListenAndServe(
-		":8080",
-		nil,
-	)
 
-	if err!= nil {
-		panic(err)
-	}
+	// fmt.Println("Server Started on:8080")
+
+	// err:= http.ListenAndServe(
+	// 	":8080",
+	// 	nil,
+	// )
+
+	// if err!= nil {
+	// 	panic(err)
+	// }
+
+
+	//addding the postgres db
+	//will check if url is present in the env 
+	//if it is it will use it otherwise by default it will be the same as above 
+	//storing the database in runtime in memory
+
+	var shortnerService *service.ShortnerService
+
+    if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
+
+
+        pgStore, err := store.NewPostgresStore(dsn)
+
+
+        if err != nil {
+            panic(err)
+        }
+
+        shortnerService = service.NewShortnerService(pgStore)
+    } else {
+
+        memoryStore := store.NewMemoryStore()
+
+        shortnerService = service.NewShortnerService(memoryStore)
+    }
+
+    urlHandler := handlers.NewUrlHandler(shortnerService)
+
+
+    http.HandleFunc("/shorten", urlHandler.ShortenUrl)
+
+
+
+    http.HandleFunc("/", urlHandler.RedirectURL)
+
+    fmt.Println("Server Started on:8080")
+
+
+    err := http.ListenAndServe(":8080", nil)
+
+    if err != nil {
+        panic(err)
+    }
 
 
 
