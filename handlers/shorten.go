@@ -75,7 +75,8 @@ func (h *UrlHandler) ShortenUrl(w http.ResponseWriter, r *http.Request) {
 	response := models.ShortenResponse{
 
 		ShortURL: fmt.Sprintf(
-			"http://localhost:8080/%s",
+			"http://%s/%s",
+			r.Host,
 			shortCode,
 		),
 	}
