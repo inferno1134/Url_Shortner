@@ -10,10 +10,9 @@ import (
 	"url-shortner/store"
 )
 
-func main (){
+func main() {
 
-	//this is default code 
-
+	//this is default code
 
 	// memoryStore:= store.NewMemoryStore()
 
@@ -30,12 +29,10 @@ func main (){
 	// urlHandler.ShortenUrl,
 	// )
 
-
 	// http.HandleFunc(
 	// 	"/",
 	// 	urlHandler.RedirectURL,
 	// )
-
 
 	// fmt.Println("Server Started on:8080")
 
@@ -48,50 +45,53 @@ func main (){
 	// 	panic(err)
 	// }
 
-
 	//addding the postgres db
-	//will check if url is present in the env 
-	//if it is it will use it otherwise by default it will be the same as above 
+	//will check if url is present in the env
+	//if it is it will use it otherwise by default it will be the same as above
 	//storing the database in runtime in memory
+
+	//update
+	//changed it to default postgres here removed the local memory store
+	//for multiple
 
 	var shortnerService *service.ShortnerService
 
-    if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
+	dsn := os.Getenv("DATABASE_URL")
 
+	if dsn == "" {
+		panic("Database Url must be in set")
+	}
 
-        pgStore, err := store.NewPostgresStore(dsn)
+	pgStore, err := store.NewPostgresStore(dsn)
 
+	if err != nil {
+		panic(err)
+	}
 
-        if err != nil {
-            panic(err)
-        }
+	shortnerService = service.NewShortnerService(pgStore)
 
-        shortnerService = service.NewShortnerService(pgStore)
-    } else {
+	urlHandler := handlers.NewUrlHandler(shortnerService)
 
-        memoryStore := store.NewMemoryStore()
+	http.HandleFunc("/shorten", urlHandler.ShortenUrl)
 
-        shortnerService = service.NewShortnerService(memoryStore)
-    }
+	http.HandleFunc("/", urlHandler.RedirectURL)
 
-    urlHandler := handlers.NewUrlHandler(shortnerService)
+	//updated the code here to check the por tnumber which will be passed as env
+	//erailer it was by deafult at 8080
+	//if no port number is provided then it will take it as 8080
 
+	port := os.Getenv("PORT ")
 
-    http.HandleFunc("/shorten", urlHandler.ShortenUrl)
+	if port == "" {
+		port = "8080"
+	}
 
+	fmt.Println("Server started on:" + port)
 
+	err = http.ListenAndServe(":"+port, nil)
 
-    http.HandleFunc("/", urlHandler.RedirectURL)
-
-    fmt.Println("Server Started on:8080")
-
-
-    err := http.ListenAndServe(":8080", nil)
-
-    if err != nil {
-        panic(err)
-    }
-
-
+	if err != nil {
+		panic(err)
+	}
 
 }
