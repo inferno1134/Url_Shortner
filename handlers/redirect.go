@@ -1,9 +1,8 @@
 package handlers
 
-import(
+import (
+	"log"
 	"net/http"
-
-
 	// "url-shortner/service"
 	// "url-shortner/models"
 )
@@ -17,6 +16,8 @@ func (h *UrlHandler) RedirectURL(
 
 ){
 
+	log.Printf("[Redirect]:Incoming Request for redirect")
+
 	shortCode := r.URL.Path[1:]
 
 	if shortCode=="" {
@@ -29,10 +30,14 @@ func (h *UrlHandler) RedirectURL(
 		return
 	}
 
+	log.Printf("[Redirect] Extracted short code: '%s'", shortCode)
 
-	longUrl, exists := h.service.GetOriginalURL(shortCode)
+	
 
-	if !exists {
+
+	longUrl, err := h.service.GetOriginalURL(shortCode)
+
+	if err!=nil {
 		http.Error(
 			w,
 			"Url not found",
@@ -41,6 +46,11 @@ func (h *UrlHandler) RedirectURL(
 
 		return 
 	}
+
+	log.Printf("[Redirect] Short code found | Code: %s | LongURL: %s", shortCode, longUrl)
+
+
+	log.Printf("[Redirect] Redirecting from %s to %s", shortCode, longUrl)
 
 	http.Redirect(
 		w,

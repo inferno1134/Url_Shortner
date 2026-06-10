@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"log"
 
 	"url-shortner/handlers"
 	"url-shortner/service"
@@ -57,16 +58,20 @@ func main() {
 	var shortnerService *service.ShortnerService
 
 	dsn := os.Getenv("DATABASE_URL")
-
+	log.Println("Loading db url from env...")
 	if dsn == "" {
 		panic("Database Url must be in set")
 	}
+
+	log.Println("Db url found and initializing postgrestore")
 
 	pgStore, err := store.NewPostgresStore(dsn)
 
 	if err != nil {
 		panic(err)
 	}
+
+	log.Println("Db pool Successfully created")
 
 	shortnerService = service.NewShortnerService(pgStore)
 
@@ -86,12 +91,19 @@ func main() {
 		port = "8080"
 	}
 
-	fmt.Println("Server started on:" + port)
+	log.Println("Starting server one port: "+ port)
+
+	
 
 	err = http.ListenAndServe(":"+port, nil)
 
+	
+
 	if err != nil {
+		log.Printf("Server Error: %v",err)
 		panic(err)
 	}
+
+	fmt.Println("Server started on:" + port)
 
 }

@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 
 	"url-shortner/models"
@@ -23,6 +24,8 @@ func NewUrlHandler(service *service.ShortnerService) *UrlHandler {
 
 func (h *UrlHandler) ShortenUrl(w http.ResponseWriter, r *http.Request) {
 
+	log.Printf("[ShortenUrl] Recieved Request | Method : %s | Content type: %s", r.Method, r.Header.Get("Content-Type"))
+
 	if r.Method != http.MethodPost {
 
 		http.Error(
@@ -39,7 +42,10 @@ func (h *UrlHandler) ShortenUrl(w http.ResponseWriter, r *http.Request) {
 
 	err := json.NewDecoder(r.Body).Decode(&req)
 
+	
+
 	if err != nil {
+		log.Printf("[ShortenUrl]: Failed to decode the request : %v", err)
 		http.Error(
 			w,
 			"Invalid Request Body",
@@ -51,6 +57,8 @@ func (h *UrlHandler) ShortenUrl(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.URL == "" {
+
+		log.Printf("[ShorternUrl]: Url field is Empty : %v", err)
 		http.Error(
 			w,
 			"Url Cannot be Empty",
@@ -71,6 +79,10 @@ func (h *UrlHandler) ShortenUrl(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
+
+	log.Printf("[ShortenUrl]: Short Url is Created")
+
+	log.Printf("[ShortenUrl] Sending Response...")
 
 	response := models.ShortenResponse{
 
