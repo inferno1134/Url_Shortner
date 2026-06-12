@@ -3,11 +3,11 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 
-	"url-shortner/models"
-	"url-shortner/service"
+	"github.com/tanishk-deore/url-shortner/logger"
+	"github.com/tanishk-deore/url-shortner/models"
+	"github.com/tanishk-deore/url-shortner/service"
 )
 
 type UrlHandler struct {
@@ -24,7 +24,7 @@ func NewUrlHandler(service *service.ShortnerService) *UrlHandler {
 
 func (h *UrlHandler) ShortenUrl(w http.ResponseWriter, r *http.Request) {
 
-	log.Printf("[ShortenUrl] Recieved Request | Method : %s | Content type: %s", r.Method, r.Header.Get("Content-Type"))
+	logger.Info("[ShortenUrl] Recieved Request | Method : %s | Content type: %s", r.Method, r.Header.Get("Content-Type"))
 
 	if r.Method != http.MethodPost {
 
@@ -42,10 +42,8 @@ func (h *UrlHandler) ShortenUrl(w http.ResponseWriter, r *http.Request) {
 
 	err := json.NewDecoder(r.Body).Decode(&req)
 
-	
-
 	if err != nil {
-		log.Printf("[ShortenUrl]: Failed to decode the request : %v", err)
+		logger.Error("[ShortenUrl]: Failed to decode the request : %v", err)
 		http.Error(
 			w,
 			"Invalid Request Body",
@@ -58,7 +56,7 @@ func (h *UrlHandler) ShortenUrl(w http.ResponseWriter, r *http.Request) {
 
 	if req.URL == "" {
 
-		log.Printf("[ShorternUrl]: Url field is Empty : %v", err)
+		logger.Error("[ShorternUrl]: Url field is Empty : %v", err)
 		http.Error(
 			w,
 			"Url Cannot be Empty",
@@ -80,9 +78,9 @@ func (h *UrlHandler) ShortenUrl(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[ShortenUrl]: Short Url is Created")
+	logger.Info("[ShortenUrl]: Short Url is Created")
 
-	log.Printf("[ShortenUrl] Sending Response...")
+	logger.Info("[ShortenUrl] Sending Response...")
 
 	response := models.ShortenResponse{
 

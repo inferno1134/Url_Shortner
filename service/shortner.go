@@ -2,56 +2,55 @@ package service
 
 import (
 	"fmt"
-	"log"
+
+	"github.com/tanishk-deore/url-shortner/store"
 )
 
-// "crypto/rand" it was earlier used for random generation of code
-
-const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-
-//changed this to use interface here 
-//as in now it will chek what kind of sevice we are using for the databse
-
-type Store interface {
-	Save(longUrl string) (string,error)
-	Get(shortCode string) (string, error)
-}
-
 type ShortnerService struct {
-	store Store
+	db    *store.PostgresStore
+	cache *store.RedisCache
 }
 
-func NewShortnerService(  store Store) *ShortnerService {
-
-	return &ShortnerService{
-		store: store,
-	}
+func NewShortnerService(db *store.PostgresStore, cache *store.RedisCache) *ShortnerService {
+	return &ShortnerService{db: db, cache: cache}
 }
 
-func (s *ShortnerService) CreateShortURL  (longUrl string) (string, error) {
-	
-	log.Printf("[Service]: Creating Short Url")
-
-	shortCode, err := s.store.Save(longUrl)
-
-	if err!=nil {
-		return "", fmt.Errorf("Error Creating short Url: %w", err)
+func (s *ShortnerService) CreateShortURL(longUrl string) (string, error) {
+	if s == nil || s.db == nil {
+		return "", fmt.Errorf("storage not initialized")
 	}
 
-	log.Printf("[Service]: Shortcode is Generated")
+	code, err := s.db.Save(longUrl)
+	if err != nil {
+		return "", err
+	}
 
-	return shortCode, nil
+	if s.cache != nil {
+		_ = s.cache.Set(code, longUrl)
+	}
+
+	return code, nil
 }
 
-func (s *ShortnerService) GetOriginalURL( shortCode string) (string, error) {
-
-	log.Printf("[Service]: Fetching the Original Url")
-
-	longUrl ,err := s.store.Get(shortCode)
-
-	if err!=nil {
-		return "", fmt.Errorf("Error retrieving original url :%w", err)
+func (s *ShortnerService) GetOriginalURL(shortCode string) (string, error) {
+	if s == nil || s.db == nil {
+		return "", fmt.Errorf("storage not initialized")
 	}
 
-	return longUrl,nil
+	if s.cache != nil {
+		if v, err := s.cache.Get(shortCode); err == nil && v != "" {
+			return v, nil
+		}
+	}
+
+	longUrl, err := s.db.Get(shortCode)
+	if err != nil {
+		return "", err
+	}
+
+	if s.cache != nil {
+		_ = s.cache.Set(shortCode, longUrl)
+	}
+
+	return longUrl, nil
 }

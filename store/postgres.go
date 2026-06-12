@@ -2,12 +2,14 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
-	"log"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/tanishk-deore/url-shortner/logger"
 )
 
 //created a pool for implementing the postgres
@@ -19,7 +21,7 @@ type PostgresStore struct {
 
 func NewPostgresStore(dsn string) (*PostgresStore, error) {
 
-	//creating pool 
+	//creating pool
 	//not a instance
 
 	var pool *pgxpool.Pool
@@ -27,12 +29,24 @@ func NewPostgresStore(dsn string) (*PostgresStore, error) {
 
 	for i := 0; i < 15; i++ {
 
-		log.Printf("[PostgresStore] Attempting databse Store connection : %d/15", i+1)
+		logger.Info("[PostgresStore] Attempting databse Store connection : %d/15", i+1)
 
-		
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		pool, err = pgxpool.New(ctx, dsn)
+
+		cfg, err := pgxpool.ParseConfig(dsn)
+		if err != nil {
+			cancel()
+			return nil, fmt.Errorf("parse config: %w", err)
+		}
+
+		cfg.MaxConns = 200
+		cfg.MinConns = 100
+		cfg.MaxConnIdleTime = 5 * time.Minute
+		cfg.MaxConnLifetime = 30 * time.Minute
+
+		pool, err = pgxpool.NewWithConfig(ctx, cfg)
 		cancel()
+
 		if err == nil {
 			break
 		}
@@ -43,12 +57,12 @@ func NewPostgresStore(dsn string) (*PostgresStore, error) {
 		return nil, fmt.Errorf("Pool Connection not established: %w", err)
 	}
 
-	log.Printf("[PostgresStore] Database Connection Established ")
+	logger.Info("[PostgresStore] Database Connection Established ")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	log.Printf("[PostgresStore] Creating Urls table...")
+	logger.Info("[PostgresStore] Creating Urls table...")
 
 	_, err = pool.Exec(ctx, `
         CREATE TABLE IF NOT EXISTS urls (
@@ -58,10 +72,10 @@ func NewPostgresStore(dsn string) (*PostgresStore, error) {
     `)
 	if err != nil {
 		pool.Close()
-		return nil, fmt.Errorf("Pool Exec: %w",err)
+		return nil, fmt.Errorf("Pool Exec: %w", err)
 	}
 
-	log.Printf("[PostgresStore] Url table is ready")
+	logger.Info("[PostgresStore] Url table is ready")
 
 	return &PostgresStore{pool: pool}, nil
 }
@@ -89,22 +103,25 @@ func toBase62(num int64) string {
 	return result
 }
 
-func (s *PostgresStore) Save(longUrl string) (string,error) {
-
-	log.Printf("[PostgresStore.Save] Saving Url...")
+func (s *PostgresStore) Save(longUrl string) (string, error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	var id int64
 
-	
+	start := time.Now()
+
 	err := s.pool.QueryRow(ctx, `INSERT INTO urls (url) VALUES ($1) RETURNING id`, longUrl).Scan(&id)
+
+	elapsed := time.Since(start)
+	logger.DB("[PostgresStore.Save] Db insertion took %s", elapsed)
+
 	if err != nil {
-		return "",fmt.Errorf("Database Insertion Failed : %w", err)
+		return "", fmt.Errorf("Database Insertion Failed : %w", err)
 	}
 
-	log.Printf("[PostgresStore.Save] Url inserted in table")
+	logger.Info("[PostgresStore.Save] Url inserted in table")
 
 	// //doing the base 62 encoding here in the db itself
 	// //kept it simple for nw
@@ -114,32 +131,42 @@ func (s *PostgresStore) Save(longUrl string) (string,error) {
 	// 	return code
 	// }
 
-	return toBase62(id),nil
+	return toBase62(id), nil
 }
 
 func (s *PostgresStore) Get(shortCode string) (string, error) {
 
-	log.Printf("[PostgresStore.Get] Fetching the Url")
-
-
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	id, err:= fromBase62(shortCode)
+	id, err := fromBase62(shortCode)
 
-	if err!=nil{
+	if err != nil {
 		return "", fmt.Errorf("Error Decoding short code %q: %w", shortCode, err)
 	}
 
-	var url string 	
+	var url string
 
-	err= s.pool.QueryRow(ctx,`SELECT url FROM urls WHERE id=$1`,id).Scan(&url)
+	start := time.Now()
 
-	if err!= nil {
-		return "", fmt.Errorf("Error querying for id %d: %w", id, err)
+	err = s.pool.QueryRow(ctx, `SELECT url FROM urls WHERE id=$1`, id).Scan(&url)
+
+	elapsed := time.Since(start)
+
+	logger.DB("[PostgresStore.Get] Db select took %s", elapsed)
+
+	
+
+	if err != nil {
+		// return "", fmt.Errorf("Error querying for id %d: %w", id, err)
+
+		if errors.Is(err, context.DeadlineExceeded){
+			log.Printf("Db Connection is not established")
+		
+		}
 	}
 
-	log.Printf("[PostgresStore.Get] Url found from base 62")
+	logger.Info("[PostgresStore.Get] Url found from base 62")
 
 	// var url string
 	// err := s.pool.QueryRow(ctx, `SELECT url FROM urls WHERE code=$1`, shortCode).Scan(&url)
@@ -149,30 +176,28 @@ func (s *PostgresStore) Get(shortCode string) (string, error) {
 	return url, nil
 }
 
+//this is just the fucntion to convert back the code into id and then fetch the longurl
 
-//this is just the fucntion to convert back the code into id and then fetch the longurl 
-
-//get fucntion will use it to get the long url and redirect function
-func fromBase62(code string )(int64 , error){
+// get fucntion will use it to get the long url and redirect function
+func fromBase62(code string) (int64, error) {
 
 	const charset = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    const base = 62
+	const base = 62
 
 	var value int64
 
-	for _,ch := range code{
+	for _, ch := range code {
 
-		idx:= strings.IndexRune(charset, ch)
+		idx := strings.IndexRune(charset, ch)
 
-		if idx < 0{
+		if idx < 0 {
 			return 0, fmt.Errorf("Invalid Base62 character : %c", ch)
-		} 
+		}
 
-		value=value*base + int64(idx)
+		value = value*base + int64(idx)
 
 	}
 
-	return value,nil
+	return value, nil
 
-	
 }

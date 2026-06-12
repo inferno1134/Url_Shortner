@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"log"
 
-	"url-shortner/handlers"
-	"url-shortner/service"
-	"url-shortner/store"
+	"github.com/tanishk-deore/url-shortner/handlers"
+	"github.com/tanishk-deore/url-shortner/logger"
+	"github.com/tanishk-deore/url-shortner/service"
+	"github.com/tanishk-deore/url-shortner/store"
 )
 
 func main() {
@@ -58,12 +58,12 @@ func main() {
 	var shortnerService *service.ShortnerService
 
 	dsn := os.Getenv("DATABASE_URL")
-	log.Println("Loading db url from env...")
+	logger.Info("Loading db url from env...")
 	if dsn == "" {
 		panic("Database Url must be in set")
 	}
 
-	log.Println("Db url found and initializing postgrestore")
+	logger.Info("Db url found and initializing postgrestore")
 
 	pgStore, err := store.NewPostgresStore(dsn)
 
@@ -71,9 +71,29 @@ func main() {
 		panic(err)
 	}
 
-	log.Println("Db pool Successfully created")
+	logger.Info("Db pool Successfully created")
+	//now we need to setup both redis and postgres
 
-	shortnerService = service.NewShortnerService(pgStore)
+	redisAddr := os.Getenv("REDIS_ADDR")
+	if redisAddr == "" {
+		redisAddr = "localhost:6379"
+	}
+
+	redisCache, err := store.NewRedisCache(redisAddr)
+
+	if err != nil {
+		panic(err)
+	}
+
+	defer func() {
+		if err := redisCache.Close(); err != nil {
+			logger.Error("Error closing Cache : %v", err)
+		}
+	}()
+
+	shortnerService = service.NewShortnerService(pgStore, redisCache)
+
+	// shortnerService = service.NewShortnerService(pgStore)
 
 	urlHandler := handlers.NewUrlHandler(shortnerService)
 
@@ -85,22 +105,18 @@ func main() {
 	//erailer it was by deafult at 8080
 	//if no port number is provided then it will take it as 8080
 
-	port := os.Getenv("PORT ")
+	port := os.Getenv("PORT")
 
 	if port == "" {
 		port = "8080"
 	}
 
-	log.Println("Starting server one port: "+ port)
-
-	
+	logger.Info("Starting server one port: %s", port)
 
 	err = http.ListenAndServe(":"+port, nil)
 
-	
-
 	if err != nil {
-		log.Printf("Server Error: %v",err)
+		logger.Error("Server Error: %v", err)
 		panic(err)
 	}
 
